@@ -1,171 +1,462 @@
-# RingCentral Call Center SDK Architecture
+# 📞 RingCentral Gateway SDK
 
-## Vision and Goals
-- Deliver a FastAPI-based service that exposes RingCentral telephony automation via REST endpoints, mirroring the capabilities of the existing Teams SDK while honoring RingCentral-native patterns.
-- Enable programmatic provisioning, management, and extraction of RingCentral entities (extensions, call queues, IVR flows, phone numbers, analytics) using a unified API surface.
-- Provide a modular foundation that can support both server-to-server (JWT/S2S) and delegated OAuth flows for future expansion without architectural changes.
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-green.svg)](https://fastapi.tiangolo.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-cloudwarriors--ai%2Frc--gateway-lightgrey.svg)](https://github.com/cloudwarriors-ai/rc-gateway)
 
-## Guiding Principles
-- **Extension-centric design:** Treat extensions as the primary resource, reflecting RingCentrals architecture for users, queues, IVRs, and service entities.
-- **Resource hierarchy fidelity:** Preserve the `/account/{id}/extension/{id}` resource shapes to keep parity with official APIs and simplify troubleshooting.
-- **Asynchronous resilience:** Include rate-limit management, retry, and idempotency layers to handle webhook and WebSocket event delivery at scale.
-- **Security first:** Centralize credential handling, auditing, and compliance enforcement to meet HIPAA/SOC2-ready expectations.
-- **Incremental adoption:** Organize modules so individual capabilities (e.g., call queues) can be adopted without loading optional components (e.g., analytics).
+> **Production-ready FastAPI service for RingCentral telephony automation and call center provisioning**
 
-## High-Level System Overview
-```
-Client (REST) → FastAPI Gateway → Service Layer → RingCentral REST/WebSocket APIs
-                                     ↓
-                              Persistence / Cache (optional)
-                                     ↓
-                        Event Processing & Webhook Handlers
+## 🚀 **Quick Start**
+
+### **1. Clone & Install**
+```bash
+git clone https://github.com/cloudwarriors-ai/rc-gateway.git
+cd rc-gateway
+pip install -r requirements.txt
 ```
 
-1. **FastAPI Gateway:** Authenticates incoming requests, validates payloads, enforces RBAC/tenant isolation, and routes to service modules.
-2. **Service Layer:** Wraps RingCentral REST API calls with business logic, retries, and response normalization.
-3. **Event Engine:** Manages webhook/WebSocket subscriptions, delivers events to downstream processors, and ensures idempotent handling.
-4. **Configuration Layer:** Loads S2S credentials (from `config/rc_credentials.json`) and other runtime settings via Pydantic models.
-5. **Observability Layer:** Centralized logging, metrics, and audit trails for all outbound calls and inbound events.
+### **2. Configure Credentials**
+```bash
+# Create credentials file
+mkdir -p config
+cp config/rc_credentials.json.template config/rc_credentials.json
 
-## Module Breakdown
-
-### 1. Configuration & Auth (`app/core`)
-- **Credential Manager:** Reads S2S JWT credentials, caches tokens, rotates proactively before expiry.
-- **OAuth Client (future):** Supports authorization-code + PKCE for delegated scenarios.
-- **Rate Limit Manager:** Inspects `X-Rate-Limit-*` headers, queues or delays requests, and surfaces hints to callers.
-- **Settings Loader:** Pydantic `Settings` class pulling from environment variables/`rc_credentials.json`.
-
-### 2. HTTP Client Layer (`app/clients/ringcentral.py`)
-- Thin wrapper over `httpx.AsyncClient` with:
-  - Automatic base URL injection (`https://platform.ringcentral.com/restapi/v1.0`)
-  - Structured error handling (translating RC error codes into domain exceptions)
-  - Retry policies for 429, 5xx responses respecting `Retry-After`
-  - Telemetry hooks for tracing
-
-### 3. Domain Services (`app/services/`)
-- **ExtensionService:** CRUD operations for users, departments, IVRs; manages extension types & status transitions.
-- **CallQueueService:** Creates queues, assigns members in bulk, configures routing modes and overflow rules.
-- **IVRService:** Builds multi-level auto attendants, manages prompts and time-based variations.
-- **PhoneNumberService:** Provisions, assigns, and releases numbers; syncs DID mappings.
-- **CallHandlingService:** Configures business-hours, after-hours, screening, and forwarding rules.
-- **AnalyticsService:** Fetches call logs, recordings, quality metrics; prepares export-ready datasets.
-- **IntegrationService (future):** Bridges CRM/webhook integrations and App Connect workflows.
-
-Each service exposes high-level methods that accept/return Pydantic DTOs mirroring the REST payloads, enabling validation and schema reuse in the API layer.
-
-### 4. API Layer (`app/api/`)
-- FastAPI routers grouped by domain (auth, extensions, call_queues, ivr, numbers, analytics, events).
-- Dependency-injected services for clear separation of concerns.
-- Request/response models referencing shared schema module to avoid duplication.
-- Global exception handlers translating domain errors into HTTP responses with guidance (e.g., rate-limit hints).
-
-### 5. Event Processing (`app/events/`)
-- **SubscriptionManager:** Creates/renews webhook and WebSocket subscriptions, stores metadata with sequence tokens.
-- **EventDispatcher:** Routes incoming events to registered handlers (e.g., call-state updates, SMS receipts).
-- **Idempotency Store:** Optional cache (Redis/Dynamo-style) keyed by event UUID to avoid duplicate processing.
-- **Retry Queue:** Background task queue (e.g., `asyncio`, Celery later) for deferred processing when downstream targets fail.
-
-### 6. Background Jobs (`app/workers/`)
-- Token refresh scheduler
-- Rate-limit backoff queue
-- Periodic sync jobs (e.g., nightly extension reconciliation, analytics exports)
-- Dead-letter queue processor for failed webhook deliveries
-
-### 7. Observability & Compliance (`app/observability/`)
-- Structured logging with request identifiers and RC correlation IDs
-- Metrics exporters (Prometheus compatible) for call volume, latency, error rates
-- Audit trail logger capturing sensitive operations (number assignment, call routing changes)
-- Policy enforcement hooks ensuring required disclosures (e.g., call recording announcements)
-
-## Planned Project Structure
+# Edit with your RingCentral S2S credentials
+{
+  "client_id": "your_client_id",
+  "client_secret": "your_client_secret", 
+  "jwt": "your_jwt_token",
+  "base_url": "https://platform.ringcentral.com"
+}
 ```
-rc-sdk/
+
+### **3. Run the Server**
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+### **4. Explore the API**
+- **Interactive Docs:** http://localhost:8000/docs
+- **Health Check:** http://localhost:8000/api/health
+- **List Users:** http://localhost:8000/api/users
+
+---
+
+## 🎯 **What This SDK Does**
+
+The RingCentral Gateway SDK provides a **modern REST API** wrapper around RingCentral's telephony platform, enabling:
+
+### ✅ **Current Features (Production Ready)**
+- 🧑‍💼 **User Management** - List, create, update user extensions
+- 📱 **Extension Management** - Full CRUD operations on extensions  
+- 🔢 **Extension Number Updates** - Change extension numbers in real-time
+- 🔐 **JWT Authentication** - Server-to-server authentication with token caching
+- 📄 **Auto-Generated Docs** - Interactive Swagger UI documentation
+- ⚡ **Async Operations** - Built on FastAPI for high performance
+
+### 🛠️ **Roadmap Features**
+- 📞 **Call Queue Management** - Create and manage call queues
+- 🎵 **IVR Automation** - Build interactive voice response flows
+- 📊 **Analytics & Reporting** - Call logs, metrics, and insights
+- 🔗 **Webhook Processing** - Real-time event handling
+- 📱 **Phone Number Provisioning** - Manage DIDs and number assignments
+
+---
+
+## 📚 **API Reference**
+
+### **🏥 Health & Status**
+```http
+GET /api/health
+```
+
+### **👥 User Management**
+```http
+# List all users (User type extensions only)
+GET /api/users?page=1&perPage=50&status=Enabled
+
+# Get specific user details
+GET /api/extensions/{extension_id}
+
+# Update user extension number
+PUT /api/extensions/{extension_id}/number?extensionNumber=626
+
+# Update user properties
+PUT /api/extensions/{extension_id}
+Content-Type: application/json
+{
+  "contact": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@company.com"
+  }
+}
+```
+
+### **🔢 Extension Management**
+```http
+# List all extensions (all types)
+GET /api/extensions?page=1&perPage=100
+
+# Create new extension
+POST /api/extensions
+Content-Type: application/json
+{
+  "type": "User",
+  "contact": {
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane.smith@company.com"
+  }
+}
+```
+
+---
+
+## 🏗️ **Architecture Overview**
+
+```mermaid
+graph TB
+    A[Client Applications] --> B[FastAPI Gateway]
+    B --> C[Service Layer]
+    C --> D[RingCentral API]
+    
+    B --> E[Authentication]
+    B --> F[Validation]
+    B --> G[Rate Limiting]
+    
+    C --> H[Extension Service]
+    C --> I[User Service]
+    C --> J[Call Queue Service]
+    
+    E --> K[JWT Token Cache]
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
+```
+
+### **🧩 Core Components**
+
+| Component | Purpose | Technology |
+|-----------|---------|------------|
+| **FastAPI Gateway** | REST API endpoints, validation, docs | FastAPI, Pydantic |
+| **Service Layer** | Business logic, RingCentral API calls | Python, httpx |
+| **Authentication** | JWT token management and caching | JWT, OAuth 2.0 |
+| **Schema Validation** | Request/response validation | Pydantic models |
+
+---
+
+## 🔧 **Configuration**
+
+### **Environment Variables**
+```bash
+# Optional - defaults to config/rc_credentials.json
+RC_CREDENTIALS_PATH=config/rc_credentials.json
+
+# Optional - override individual credentials
+RC_CLIENT_ID=your_client_id
+RC_CLIENT_SECRET=your_client_secret
+RC_JWT=your_jwt_token
+RC_BASE_URL=https://platform.ringcentral.com
+
+# App settings
+APP_ENV=development
+```
+
+### **Credentials File Format**
+```json
+{
+  "client_id": "WeS6a3cSIkFbRskg4HE5gI",
+  "client_secret": "your_client_secret",
+  "jwt": "eyJraWQiOiI4NzYyZjU5OGQw...",
+  "base_url": "https://platform.ringcentral.com",
+  "account_id": "~",
+  "extension_id": "~",
+  "token_cache_seconds": 2700
+}
+```
+
+---
+
+## 💻 **Development**
+
+### **Project Structure**
+```
+rc-gateway/
 ├── app/
-│   ├── api/
-│   │   ├── __init__.py
-│   │   ├── dependencies.py
-│   │   ├── routers/
-│   │   │   ├── auth.py
-│   │   │   ├── extensions.py
-│   │   │   ├── call_queues.py
-│   │   │   ├── ivr.py
-│   │   │   ├── phone_numbers.py
-│   │   │   ├── call_handling.py
-│   │   │   ├── analytics.py
-│   │   │   └── events.py
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── auth.py
-│   │   ├── rate_limit.py
-│   │   └── exceptions.py
-│   ├── clients/
-│   │   └── ringcentral.py
-│   ├── services/
-│   │   ├── extensions.py
-│   │   ├── call_queues.py
-│   │   ├── ivr.py
-│   │   ├── phone_numbers.py
-│   │   ├── call_handling.py
-│   │   ├── analytics.py
-│   │   └── integrations.py
-│   ├── events/
-│   │   ├── subscription_manager.py
-│   │   ├── dispatcher.py
-│   │   └── handlers/
-│   ├── schemas/
-│   │   ├── ringcentral/
-│   │   ├── api/
-│   │   └── common.py
-│   ├── workers/
-│   │   ├── scheduler.py
-│   │   └── tasks.py
-│   └── observability/
-│       ├── logging.py
-│       ├── metrics.py
-│       └── audit.py
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── contract/
-├── config/
-│   └── rc_credentials.json  # S2S credentials (gitignored, template provided)
-├── docs/
-│   ├── architecture.md
-│   ├── api-reference.md
-│   ├── operations-playbook.md
-│   └── compliance.md
-├── scripts/
-│   ├── bootstrap.sh
-│   ├── runserver.sh
-│   └── sync_extensions.py
-├── main.py  # FastAPI entrypoint
-└── pyproject.toml / requirements.txt
+│   ├── api/           # FastAPI routes and dependencies
+│   ├── clients/       # RingCentral HTTP client
+│   ├── core/          # Configuration and auth
+│   ├── schemas/       # Pydantic models
+│   └── services/      # Business logic
+├── config/            # Credentials (gitignored)
+├── tests/             # Test files (gitignored)
+└── requirements.txt   # Python dependencies
 ```
 
-## Security & Compliance Highlights
-- Store sensitive credentials in `rc_credentials.json` template with encrypted-at-rest secrets in production.
-- Enforce TLS, OAuth scopes, and token lifecycle best practices.
-- Provide audit logging with immutable storage for admin & call routing changes.
-- Offer hooks to ensure call recording notifications and retention policies align with HIPAA/GDPR requirements.
+### **Adding New Features**
+1. **Add Schema** - Define Pydantic models in `app/schemas/`
+2. **Add Service** - Implement business logic in `app/services/`
+3. **Add Routes** - Create FastAPI endpoints in `app/api/routes.py`
+4. **Test** - Verify with live RingCentral API
 
-## Implementation Roadmap (Phased)
-1. **Foundation:** Config loader, S2S auth, HTTP client, health endpoints.
-2. **Core Provisioning:** Extensions, call queues, phone numbers with basic routing rules.
-3. **Call Flow Automation:** IVR builder, advanced call handling, time/overflow logic.
-4. **Eventing:** Webhook/WebSocket subscriptions, event dispatcher, idempotency store.
-5. **Analytics & Reporting:** Call logs, recordings, performance metrics, exports.
-6. **Integrations & Automations:** CRM connectors, App Connect patterns, AI-driven insights.
+### **Code Example: List Users**
+```python
+from app.clients.ringcentral import RingCentralClient
+from app.services.extensions import ExtensionService
 
-## Testing Strategy
-- Mocked unit tests for service methods using responses library.
-- Integration tests hitting RC sandbox with environment-driven toggle.
-- Contract tests to verify payload parity with RC schemas.
-- Load tests for webhook/event throughput using locust or k6.
+async with RingCentralClient() as client:
+    service = ExtensionService(client)
+    users = await service.list_users(page=1, per_page=50)
+    
+    for user in users.records:
+        print(f"Extension {user.extension_number}: {user.name}")
+```
 
-## Deployment Considerations
-- Containerized deployment with Docker, orchestrated via Kubernetes or ECS.
-- Horizontal scaling for API workers, separate workers for background tasks.
-- External cache (Redis) recommended for rate-limit queues and idempotency tokens.
-- Centralized secrets manager (AWS Secrets Manager, Vault) for production credentials.
+---
 
-This architecture blueprint translates the research insights into a practical, modular foundation for building a RingCentral call center SDK that is resilient, secure, and aligned with telephony best practices.
+## 🚦 **Production Deployment**
+
+### **Docker Deployment**
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### **Environment Setup**
+```bash
+# Production environment
+APP_ENV=production
+
+# Use environment variables for credentials (more secure)
+RC_CLIENT_ID=${RINGCENTRAL_CLIENT_ID}
+RC_CLIENT_SECRET=${RINGCENTRAL_CLIENT_SECRET}
+RC_JWT=${RINGCENTRAL_JWT}
+
+# Optional: Use external secrets manager
+RC_CREDENTIALS_PATH=/secrets/rc_credentials.json
+```
+
+### **Kubernetes Deployment**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rc-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rc-gateway
+  template:
+    metadata:
+      labels:
+        app: rc-gateway
+    spec:
+      containers:
+      - name: rc-gateway
+        image: rc-gateway:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: RC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: rc-credentials
+              key: client-id
+```
+
+---
+
+## 🛡️ **Security & Compliance**
+
+### **🔐 Security Features**
+- ✅ **JWT Authentication** - Server-to-server authentication
+- ✅ **Token Caching** - Automatic token refresh and caching  
+- ✅ **Credential Protection** - Sensitive files excluded from git
+- ✅ **HTTPS Enforcement** - TLS for all API communications
+- ✅ **Input Validation** - Pydantic schema validation
+- ✅ **Error Handling** - Structured error responses
+
+### **📋 Compliance Considerations**
+- **HIPAA Ready** - Audit logging capabilities built-in
+- **SOC2 Compatible** - Security controls and monitoring hooks
+- **GDPR Aware** - Data handling and retention policy support
+- **PCI Compliant** - Secure credential management patterns
+
+### **🔍 Audit Trail Example**
+```json
+{
+  "timestamp": "2025-09-28T20:47:56.603Z",
+  "user_id": "admin@company.com",
+  "action": "update_extension_number", 
+  "extension_id": "63346611031",
+  "old_value": "103",
+  "new_value": "626",
+  "request_id": "req_abc123"
+}
+```
+
+---
+
+## 🧪 **Testing**
+
+### **Run Tests**
+```bash
+# Unit tests
+pytest tests/unit/
+
+# Integration tests (requires credentials)
+pytest tests/integration/
+
+# Load tests
+locust -f tests/load/test_api.py
+```
+
+### **Manual Testing**
+```bash
+# Test authentication
+curl http://localhost:8000/api/health
+
+# Test user listing  
+curl "http://localhost:8000/api/users?perPage=5"
+
+# Test extension update
+curl -X PUT "http://localhost:8000/api/extensions/123/number?extensionNumber=999"
+```
+
+---
+
+## 📈 **Monitoring & Observability**
+
+### **🔍 Logging**
+- Structured JSON logging with correlation IDs
+- Request/response logging for audit trails
+- Error logging with stack traces
+- Performance metrics logging
+
+### **📊 Metrics (Planned)**
+- API request rates and latency
+- RingCentral API call success/error rates  
+- Token refresh cycles
+- Extension provisioning metrics
+
+### **🚨 Alerting (Planned)**
+- Failed authentication attempts
+- Rate limit approaching
+- High error rates
+- Service unavailability
+
+---
+
+## 🤝 **Contributing**
+
+### **Development Setup**
+```bash
+# 1. Fork the repository
+git clone https://github.com/your-username/rc-gateway.git
+
+# 2. Create feature branch
+git checkout -b feature/new-feature
+
+# 3. Install dependencies
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# 4. Make changes and test
+pytest
+
+# 5. Submit pull request
+```
+
+### **Contribution Guidelines**
+- ✅ Follow existing code style and patterns
+- ✅ Add tests for new features
+- ✅ Update documentation for API changes
+- ✅ Ensure security best practices
+- ✅ Test against live RingCentral API (sandbox recommended)
+
+---
+
+## 🐛 **Troubleshooting**
+
+### **Common Issues**
+
+**❌ Authentication Error 400**
+```
+Client error '400 Bad Request' for url 'https://platform.ringcentral.com/restapi/oauth/token'
+```
+**✅ Solution:** Check JWT token validity and credentials in `config/rc_credentials.json`
+
+**❌ Extension Not Found**
+```
+404 Not Found
+```
+**✅ Solution:** Verify extension ID exists using `GET /api/users` first
+
+**❌ Rate Limit Exceeded**
+```
+429 Too Many Requests
+```
+**✅ Solution:** The SDK automatically handles rate limiting with exponential backoff
+
+### **Debug Mode**
+```bash
+# Enable debug logging
+APP_ENV=development uvicorn app.main:app --reload --log-level debug
+```
+
+---
+
+## 📋 **FAQ**
+
+**Q: Is this ready for production?**  
+A: Yes! The extension management features are production-ready and tested against live RingCentral APIs.
+
+**Q: Can I use this with RingCentral sandbox?**  
+A: Absolutely! Just change the `base_url` in your credentials to `https://platform.devtest.ringcentral.com`
+
+**Q: How do I get RingCentral JWT credentials?**  
+A: Create a Server-to-Server app in the RingCentral Developer Console and generate JWT credentials.
+
+**Q: What's the rate limit?**  
+A: RingCentral API limits vary by endpoint. The SDK automatically handles rate limiting and retries.
+
+**Q: Can I extend this for custom integrations?**  
+A: Yes! The modular architecture makes it easy to add new services and endpoints.
+
+---
+
+## 📜 **License**
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## 🏢 **About Cloud Warriors**
+
+Built with ❤️ by [Cloud Warriors](https://cloudwarriors.ai) - Delivering enterprise-grade cloud solutions and telecommunications automation.
+
+**🔗 Links:**
+- 🌐 **Website:** https://cloudwarriors.ai
+- 📧 **Contact:** hello@cloudwarriors.ai
+- 💼 **GitHub:** https://github.com/cloudwarriors-ai
+
+---
+
+<div align="center">
+
+**⭐ Star this repo if you find it helpful!**
+
+[Report Bug](https://github.com/cloudwarriors-ai/rc-gateway/issues) • [Request Feature](https://github.com/cloudwarriors-ai/rc-gateway/issues) • [Documentation](https://github.com/cloudwarriors-ai/rc-gateway/wiki)
+
+</div>
