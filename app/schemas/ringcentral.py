@@ -165,3 +165,60 @@ class ExtensionDetail(BaseModel):
     assigned_country: Optional[CountryInfo] = Field(default=None, alias="assignedCountry")
     site_access: Optional[str] = Field(default=None, alias="siteAccess")
     creation_time: Optional[str] = Field(default=None, alias="creationTime")
+
+
+# Site/Location Management Schemas
+
+class SiteAccess(str, Enum):
+    LIMITED = "Limited"
+    UNLIMITED = "Unlimited"
+
+
+class BusinessAddress(BaseModel):
+    street: Optional[str] = None
+    street2: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    country: Optional[str] = None
+
+
+class SiteSummary(BaseModel):
+    id: str
+    name: str
+    extension_number: Optional[str] = Field(default=None, alias="extensionNumber")
+
+
+class SiteDetail(BaseModel):
+    uri: Optional[str] = None
+    id: str
+    name: str
+    extension_number: Optional[str] = Field(default=None, alias="extensionNumber")
+    business_address: Optional[BusinessAddress] = Field(default=None, alias="businessAddress")
+    regional_settings: Optional[RegionalSettings] = Field(default=None, alias="regionalSettings")
+    site_access: Optional[SiteAccess] = Field(default=None, alias="siteAccess")
+    caller_id_name: Optional[str] = Field(default=None, alias="callerIdName")
+
+
+class SiteListResponse(BaseModel):
+    records: list[SiteSummary]
+    paging: Optional[PagingInfo] = None
+    navigation: Optional[NavigationInfo] = None
+
+
+class SiteUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    extension_number: Optional[str] = Field(default=None, alias="extensionNumber")
+    business_address: Optional[BusinessAddress] = Field(default=None, alias="businessAddress")
+    regional_settings: Optional[RegionalSettings] = Field(default=None, alias="regionalSettings")
+    site_access: Optional[SiteAccess] = Field(default=None, alias="siteAccess")
+    caller_id_name: Optional[str] = Field(default=None, alias="callerIdName")
+
+
+class CreateSiteRequest(BaseModel):
+    name: str
+    extension_number: Optional[str] = Field(default=None, alias="extensionNumber")
+    business_address: Optional[BusinessAddress] = Field(default=None, alias="businessAddress")
+    regional_settings: Optional[RegionalSettings] = Field(default=None, alias="regionalSettings")
+    site_access: Optional[SiteAccess] = Field(default=SiteAccess.LIMITED, alias="siteAccess")
+    caller_id_name: Optional[str] = Field(default=None, alias="callerIdName")

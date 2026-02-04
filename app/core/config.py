@@ -28,6 +28,11 @@ class Settings:
     rc_account_id: Optional[str]
     rc_extension_id: Optional[str]
     rc_token_cache_seconds: Optional[int]
+    redis_host: Optional[str]
+    redis_port: Optional[int]
+    redis_db: Optional[int]
+    redis_password: Optional[str]
+    cache_ttl_seconds: Optional[int]
 
     def load_ringcentral_credentials(self) -> RingCentralCredentials:
         data: dict[str, object] = {}
@@ -77,4 +82,9 @@ def get_settings() -> Settings:
         rc_account_id=os.getenv("RC_ACCOUNT_ID"),
         rc_extension_id=os.getenv("RC_EXTENSION_ID"),
         rc_token_cache_seconds=cache_seconds,
+        redis_host=os.getenv("REDIS_HOST", "localhost"),
+        redis_port=int(os.getenv("REDIS_PORT", "6379")),
+        redis_db=int(os.getenv("REDIS_DB", "0")),
+        redis_password=os.getenv("REDIS_PASSWORD"),
+        cache_ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "300")),
     )
